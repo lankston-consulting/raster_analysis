@@ -1,12 +1,12 @@
-import concurrent.futures
 import numpy as np
 from statsmodels.regression.linear_model import OLS, GLSAR
-from statsmodels.stats.multitest import fdrcorrection, multipletests
-from scipy.stats import t as ttest
+from scipy import stats as st
 import warnings
 
 warnings.filterwarnings("ignore", category=RuntimeWarning)
 warnings.filterwarnings("ignore", category=UserWarning)
+
+nodata = -3.4E38
 
 
 class Stat(object):
@@ -211,7 +211,6 @@ class ZonalStatistics(object):
                             stats[zone] = Stat(zone)
                         stats[zone].add_data(data)
 
-
         return stats
 
     def t_test(self, *args, **kwargs):
@@ -220,9 +219,7 @@ class ZonalStatistics(object):
         J = args[0]['zone_data'].shape[1]
         K = args[0]['zone_data'].shape[2]
 
-        nodata = -32768
-
-        output = np.empty((4, J, K), dtype='int16')
+        output = np.empty((4, J, K), dtype='float32')
         output.fill(nodata)
 
         for i in range(I):
@@ -233,10 +230,13 @@ class ZonalStatistics(object):
 
                     if zone > 0:
                         stat = args[0]['statistics'].statistics[zone]
-                        vals = self._t_test_strict_r_logic(stat, data)
-                        if vals is None:
-                            vals = (nodata, nodata, nodata, nodata)
-                        output[:, j, k] = np.array(vals)
+                        try:
+                            vals = self._t_test_strict_r_logic(stat, data)
+                            if vals is not None:
+                                output[:, j, k] = vals
+                        except Exception as ex:
+                            #print(ex)
+                            pass
 
         # This should be done all at once at the end, as it uses relative magnitudes of p to correct
         # output = np.ma.masked_where(output == nodata, output)
@@ -313,50 +313,71 @@ class ZonalStatistics(object):
         if np.ma.is_masked(i_mean):
             return None
 
-        i_mean_model = GLSAR(data, missing='drop')
-        i_mean_result = i_mean_model.fit()
-        i_se = i_mean_result.HC0_se
+        # Nan the missing values (statsmodels doesn't seem to acknowledge masked arrays)
+        nan_data = data.astype(float).filled(np.nan)
+        # i_mean_model = GLSAR(nan_data, missing='drop')
+        # i_mean_result = i_mean_model.fit()
+        # i_se = i_mean_result.bse
 
         # Adjust population stats to remove point
-        #### NEED TO ADJUST FOR WEIGHTED TEMPORAL MEAN
-        # The -1 operations are because we removed a datapoint... maybe make this a variable
+        # The -1 operations are because we removed a data point
         p_n_adj = stat.n - 1
         p_mean_list = ((stat.mean * p_n_adj) - data) / p_n_adj  # This value is a list
-        p_mean = np.ma.mean(p_mean_list)  # This is a single value
+        p_mean_list = np.ma.masked_where(p_mean_list < 0, p_mean_list)
+        # p_mean = np.ma.mean(p_mean_list)  # This is a single value
 
         # Get the mean difference
-        mean_diff = i_mean - p_mean
+        # mean_diff = i_mean - p_mean
 
         # t test
-        t = mean_diff / i_se
+        # t = mean_diff / i_se
+
+        # Skip doing the calculations manually, just do a basic t test
+        t, p = st.ttest_rel(nan_data, p_mean_list, nan_policy='omit')
+
+        if np.ma.is_masked(t):
+            return None
 
         # degrees of freedom
-        df = i_mean_result.nobs - len(i_mean_result.params)
+        # df = i_mean_result.nobs - len(i_mean_result.params)
 
         # p value
-        p = ttest.cdf(np.abs(t), df=df) * 2
+        # p = st.t.cdf(np.abs(t), df=df) * 2
 
-        years = list(range(len(p_mean_list)))
-        pop_trend_model = OLS(p_mean_list, years, missing='drop')
+        # Make years list for regressions
+        years = np.array(list(range(len(p_mean_list))))
+
+        # Nan years where there's missing data
+        mask_years = np.ma.array(years.astype(float), mask=p_mean_list.mask)
+        nan_years = mask_years.filled(np.nan)
+        pop_trend_model = GLSAR(p_mean_list, nan_years, missing='drop')
         pop_trend_result = pop_trend_model.fit()
 
-        ind_trend_model = GLSAR(data, years, missing='drop')
+        mask_years = np.ma.array(years.astype(float), mask=data.mask)
+        nan_years = mask_years.filled(np.nan)
+        ind_trend_model = GLSAR(data, nan_years, missing='drop')
         ind_trend_result = ind_trend_model.fit()
 
         pop_slope = pop_trend_result.params[0]
         ind_slope = ind_trend_result.params[0]
 
         slope_diff = ind_slope - pop_slope
-        slope_se = ind_trend_result.HC0_se
+        slope_se = ind_trend_result.bse
+        # slope_pop_se = pop_trend_result.bse
         slope_t = slope_diff / slope_se
+
+        # slope_n = len(ind_trend_model.endog)
+        # slope_pop_n = len(pop_trend_model.endog)
 
         df = ind_trend_result.nobs - len(ind_trend_result.params)
 
-        slope_p = ttest.cdf(np.abs(slope_t), df=df) * 2
+        slope_p = st.t.sf(np.abs(slope_t), df=df) * 2
 
-        vals = np.array([t[0], p[0], slope_t[0], slope_p[0]])
-        vals = vals * 1000
+        # slope_t, slope_p = st.ttest_ind_from_stats(ind_slope, slope_se, slope_n, pop_slope, slope_pop_se, slope_pop_n, equal_var=False)
 
-        return vals.astype(int)
+        # vals = np.array([t[0], p[0], slope_t[0], slope_p[0]])
+        vals = np.array([t, p, slope_t[0], slope_p[0]])
+
+        return vals
 
 

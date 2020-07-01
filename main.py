@@ -1,8 +1,7 @@
 from bounded_pool_executor.bounded_pool_executor import BoundedProcessPoolExecutor
 import concurrent.futures
 from datetime import datetime
-import gc
-import numpy as np
+import os
 import pickle
 import rasterio
 
@@ -13,12 +12,16 @@ zone_raster_path = '/mnt/hgfs/MCR/BPS_PrvOwn_Cmb/BpsPrvOwnCmb.tif'
 data_raster_path = '/mnt/hgfs/MCR/RPMS_Stack8419_TIF/rpms8419.tif'
 dummy_path = '/mnt/hgfs/MCR/Degradation/test.tif'
 
-out_path = ['/mnt/hgfs/MCR/Degradation/mean_t.tif', '/mnt/hgfs/MCR/Degradation/mean_p.tif',
-            '/mnt/hgfs/MCR/Degradation/slope_t.tif', '/mnt/hgfs/MCR/Degradation/slope_p.tif']
+
+
+out_path = ['/mnt/hgfs/MCR/Degradation/mean_t.tif', '/mnt/hgfs/MCR/Degradation/mean_p_adj.tif',
+            '/mnt/hgfs/MCR/Degradation/slope_t.tif', '/mnt/hgfs/MCR/Degradation/slope_p_adj.tif']
 
 stats_pickle_path = '/mnt/hgfs/MCR/zs.pkl'
 
 BLOCKSIZE = 1024
+
+nodata = -3.4E38
 
 
 def main_process(task, zone_file, data_file, out_file, queue_size=1):
@@ -150,7 +153,12 @@ def main_statistics(task, zone_file, data_file, out_files, queue_size=10, *args,
         with rasterio.open(zone_file) as zone_src:
             # Copy the zone_src dataset parameters for the output dataset, and set up tiles
             profile = zone_src.profile
-            profile.update(blockxsize=BLOCKSIZE, blockysize=BLOCKSIZE, tiled=True)
+            profile.update(blockxsize=BLOCKSIZE,
+                           blockysize=BLOCKSIZE,
+                           tiled=True,
+                           dtype='float32',
+                           compress='LZW',
+                           nodata=nodata)
 
             if task == 'degradation':
                 mean_t_raster = rasterio.open(out_files[0], 'w', **profile)
@@ -179,23 +187,14 @@ def main_statistics(task, zone_file, data_file, out_files, queue_size=10, *args,
                     def read_zone_ds(z_window):
                         return zone_src.read(window=z_window)
 
+                    # For handling different extents (bot not projections!), pass the zone window, convert to
+                    # lat/long, and get the appropriate window for the data
                     def read_data(z_window):
                         bounds = zone_src.window_bounds(z_window)
                         d_window = data_src.window(*bounds)
                         return data_src.read(window=d_window), d_window
 
-                    def write_data(ds, data_ary, z_window):
-                        return ds.write(data_ary.reshape(1, data.shape[1], data.shape[2]), window=z_window)
-
-                    # def write_mean_t(data_ary, z_window):
-                    #     mean_t_raster.write(data_ary, window=z_window)
-                    # def write_mean_p(data_ary, z_window):
-                    #     mean_p_raster.write(data_ary, window=z_window)
-                    # def write_slope_t(data_ary, z_window):
-                    #     slope_t_raster.write(data_ary, window=z_window)
-                    # def write_slope_p(data_ary, z_window):
-                    #     slope_p_raster.write(data_ary, window=z_window)
-
+                    # Set up a window generator
                     streamer = stream()
 
                     # This gets redefined every time the streamer iterates, and the object is a set of not
@@ -249,24 +248,17 @@ def main_statistics(task, zone_file, data_file, out_files, queue_size=10, *args,
                             data = future.result()
                             window = futures_and_windows[future]
 
-                            window_count -= 1
-                            print(f"Remaining: {window_count} || {window} || Size of futures: {len(futures)}")
-
                             if task == 'collect':
                                 [accumulator.update(zone, data[zone]) for zone in data]
                             else:
-                                mean_t_raster.write(data[0, :, :].reshape(1, data.shape[1], data.shape[2]), window=window)
-                                mean_p_raster.write(data[1, :, :].reshape(1, data.shape[1], data.shape[2]), window=window)
-                                slope_t_raster.write(data[2, :, :].reshape(1, data.shape[1], data.shape[2]), window=window)
-                                slope_p_raster.write(data[3, :, :].reshape(1, data.shape[1], data.shape[2]), window=window)
-                            #     ex = executor.submit(write_data, mean_t_raster, data[0, :, :], window)
-                            #     futures.add(ex)
-                            #     ex = executor.submit(write_data, mean_p_raster, data[1, :, :], window)
-                            #     futures.add(ex)
-                            #     ex = executor.submit(write_data, slope_t_raster, data[2, :, :], window)
-                            #     futures.add(ex)
-                            #     ex = executor.submit(write_data, slope_p_raster, data[3, :, :], window)
-                            #     futures.add(ex)
+                                data = [data[i, :, :].reshape(1, data.shape[1], data.shape[2]) for i in range(4)]
+                                mean_t_raster.write(data[0], window=window)
+                                mean_p_raster.write(data[1], window=window)
+                                slope_t_raster.write(data[2], window=window)
+                                slope_p_raster.write(data[3], window=window)
+
+                            window_count -= 1
+                            print(f"Remaining: {window_count} || {window} || Size of futures: {len(futures)}")
 
                             del futures_and_windows[future]
 
@@ -279,24 +271,17 @@ def main_statistics(task, zone_file, data_file, out_files, queue_size=10, *args,
                         data = future.result()
                         window = futures_and_windows[future]
 
-                        window_count -= 1
-                        print(f"Remaining: {window_count} || {window} || Size of futures: {len(futures)}")
-
                         if task == 'collect':
                             [accumulator.update(zone, data[zone]) for zone in data]
                         else:
-                            mean_t_raster.write(data[0, :, :].reshape(1, data.shape[1], data.shape[2]), window=window)
-                            mean_p_raster.write(data[1, :, :].reshape(1, data.shape[1], data.shape[2]), window=window)
-                            slope_t_raster.write(data[2, :, :].reshape(1, data.shape[1], data.shape[2]), window=window)
-                            slope_p_raster.write(data[3, :, :].reshape(1, data.shape[1], data.shape[2]), window=window)
-                            # ex = executor.submit(write_data, mean_t_raster, data[0, :, :], window)
-                            # futures.add(ex)
-                            # ex = executor.submit(write_data, mean_p_raster, data[1, :, :], window)
-                            # futures.add(ex)
-                            # ex = executor.submit(write_data, slope_t_raster, data[2, :, :], window)
-                            # futures.add(ex)
-                            # ex = executor.submit(write_data, slope_p_raster, data[3, :, :], window)
-                            # futures.add(ex)
+                            data = [data[i, :, :].reshape(1, data.shape[1], data.shape[2]) for i in range(4)]
+                            mean_t_raster.write(data[0], window=window)
+                            mean_p_raster.write(data[1], window=window)
+                            slope_t_raster.write(data[2], window=window)
+                            slope_p_raster.write(data[3], window=window)
+
+                        window_count -= 1
+                        print(f"Remaining: {window_count} || {window} || Size of futures: {len(futures)}")
 
                         del futures_and_windows[future]
 
@@ -316,7 +301,9 @@ def main_statistics(task, zone_file, data_file, out_files, queue_size=10, *args,
                         mean_p_raster.close()
                         slope_t_raster.close()
                         slope_p_raster.close()
+                        dummy.close()
 
+                        os.remove(dummy_path)
 
         return accumulator
 
@@ -328,7 +315,7 @@ if __name__ == '__main__':
         acc = pickle.load(f)
 
     start = datetime.now()
-    main_statistics('degradation', zone_raster_path, data_raster_path, out_path, 12, acc=acc)
+    main_statistics('degradation', zone_raster_path, data_raster_path, out_path, 20, acc=acc)
     stop = datetime.now()
     print('Total runtime:', (stop - start).seconds / 60, 'minutes')
 
