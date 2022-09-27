@@ -1,0 +1,22 @@
+[[source]]
+url = "https://pypi.org/simple"
+verify_ssl = true
+name = "pypi"
+
+[packages]
+bounded_pool_executor = "*"
+numpy = "*"
+pandas = "*"
+python-dotenv = "*"
+rasterio = "*"
+scipy = "*"
+statsmodels = "*"
+
+[dev-packages]
+black = {version = "*"}
+build = "*"
+pylama = "*"
+pylint = "*"
+
+[requires]
+python_version = "3.10"

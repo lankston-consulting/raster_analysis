@@ -1,4 +1,4 @@
-from bounded_pool_executor.bounded_pool_executor import BoundedProcessPoolExecutor
+from bounded_pool_executor import BoundedProcessPoolExecutor
 import concurrent.futures
 from datetime import datetime
 import os
@@ -8,16 +8,26 @@ import rasterio
 from ra import degradation
 from ra import zonal_statistics
 
-zone_raster_path = '/mnt/hgfs/MCR/BPS_PrvOwn_Cmb/BpsPrvOwnCmb.tif'
-data_raster_path = '/mnt/hgfs/MCR/RPMS_Stack8419_TIF/rpms8419.tif'
-dummy_path = '/mnt/hgfs/MCR/Degradation/test.tif'
+# zone_raster_path = '/mnt/hgfs/MCR/BPS_PrvOwn_Cmb/BpsPrvOwnCmb.tif'
+# data_raster_path = '/mnt/hgfs/MCR/RPMS_Stack8419_TIF/rpms8419.tif'
+# dummy_path = '/mnt/hgfs/MCR/Degradation/test.tif'
 
 
 
-out_path = ['/mnt/hgfs/MCR/Degradation/mean_t.tif', '/mnt/hgfs/MCR/Degradation/mean_p_adj.tif',
-            '/mnt/hgfs/MCR/Degradation/slope_t.tif', '/mnt/hgfs/MCR/Degradation/slope_p_adj.tif']
+# out_path = ['/mnt/hgfs/MCR/Degradation/mean_t.tif', '/mnt/hgfs/MCR/Degradation/mean_p_adj.tif',
+#             '/mnt/hgfs/MCR/Degradation/slope_t.tif', '/mnt/hgfs/MCR/Degradation/slope_p_adj.tif']
 
-stats_pickle_path = '/mnt/hgfs/MCR/zs.pkl'
+# stats_pickle_path = '/mnt/hgfs/MCR/zs.pkl'
+
+zone_raster_path = './bpslut4_wgs84.tif'
+data_raster_path = '../degradation/rpms_stack.tif'
+dummy_path = './test.tif'
+
+out_path = ['./mean_t.tif', './mean_p_adj.tif',
+            './slope_t.tif', './slope_p_adj.tif']
+
+stats_pickle_path = './zs.pkl'
+
 
 BLOCKSIZE = 1024
 
@@ -309,7 +319,7 @@ def main_statistics(task, zone_file, data_file, out_files, queue_size=10, *args,
 
 
 if __name__ == '__main__':
-    #acc = main_statistics('collect', zone_raster_path, data_raster_path, out_path)
+    # acc = main_statistics('collect', zone_raster_path, data_raster_path, out_path)
 
     with open(stats_pickle_path, 'rb') as f:
         acc = pickle.load(f)
