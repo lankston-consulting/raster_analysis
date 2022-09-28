@@ -19,7 +19,7 @@ from ra import zonal_statistics
 
 # stats_pickle_path = '/mnt/hgfs/MCR/zs.pkl'
 
-zone_raster_path = './Zones6.tif'
+zone_raster_path = 'gs://fuelcast-data/degradation/Zones6.tif'
 data_raster_path = '../data/Zones6/rpms_stack.tif'
 dummy_path = './test.tif'
 
@@ -180,9 +180,6 @@ def main_statistics(task, zone_file, data_file, out_files, queue_size=10, *args,
                 slope_p_raster = rasterio.open(out_files[3], 'w', **profile)
 
             dummy = rasterio.open(dummy_path, 'w', **profile)
-
-            for y in range(1985, 2022):
-                dx = rasterio.open("gs://fuelcast-data/rpms/" + str(y) + "/rpms_" + str(y) + ".tif", chunks=(1, 1024, 1024), lock=False)
 
             with rasterio.open(data_file) as data_src:
 
@@ -357,13 +354,13 @@ if __name__ == '__main__':
             with rasterio.open(layer) as src1:
                 dst.write_band(id, src1.read(1))
 
-    acc = main_statistics('collect', zone_raster_path, data_raster_path, out_path)
+    acc = main_statistics('collect', zone_raster_path, data_raster_path, out_path, 60)
 
     with open(stats_pickle_path, 'rb') as f:
         acc = pickle.load(f)
 
     start = datetime.now()
-    main_statistics('degradation', zone_raster_path, data_raster_path, out_path, 20, acc=acc)
+    main_statistics('degradation', zone_raster_path, data_raster_path, out_path, 60, acc=acc)
     stop = datetime.now()
     print('Total runtime:', (stop - start).seconds / 60, 'minutes')
 

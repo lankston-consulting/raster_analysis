@@ -174,7 +174,7 @@ class StatAccumulator(object):
         del self.merged_stats
         return
 
-    def write(self, path='./zone_stats.csv'):
+    def write(self, path='./output/zone_stats.csv'):
 
         with open(path, 'w') as f:
             header = 'zone, year, mean, std, n\n'
