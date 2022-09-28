@@ -19,14 +19,17 @@ from ra import zonal_statistics
 
 # stats_pickle_path = '/mnt/hgfs/MCR/zs.pkl'
 
-zone_raster_path = './bpslut4_wgs84.tif'
-data_raster_path = '../degradation/rpms_stack.tif'
+zone_raster_path = './Zones6.tif'
+data_raster_path = '../data/Zones6/rpms_stack.tif'
 dummy_path = './test.tif'
 
-out_path = ['./mean_t.tif', './mean_p_adj.tif',
-            './slope_t.tif', './slope_p_adj.tif']
+out_path = ['./output/mean_t.tif', './output/mean_p_adj.tif',
+            './output/slope_t.tif', './output/slope_p_adj.tif']
 
-stats_pickle_path = './zs.pkl'
+if not os.path.exists("./output/"):
+    os.makedirs("./output/")
+
+stats_pickle_path = './output/zs.pkl'
 
 
 BLOCKSIZE = 1024
@@ -178,6 +181,9 @@ def main_statistics(task, zone_file, data_file, out_files, queue_size=10, *args,
 
             dummy = rasterio.open(dummy_path, 'w', **profile)
 
+            for y in range(1985, 2022):
+                dx = rasterio.open("gs://fuelcast-data/rpms/" + str(y) + "/rpms_" + str(y) + ".tif", chunks=(1, 1024, 1024), lock=False)
+
             with rasterio.open(data_file) as data_src:
 
                 zone_windows = [window for ij, window in dummy.block_windows()]
@@ -319,7 +325,39 @@ def main_statistics(task, zone_file, data_file, out_files, queue_size=10, *args,
 
 
 if __name__ == '__main__':
-    # acc = main_statistics('collect', zone_raster_path, data_raster_path, out_path)
+
+    path_template = "gs://fuelcast-data/rpms/"
+    zone_ds = rasterio.open("gs://fuelcast-data/degradation/Zones6.tif", chunks=(1024, 1024))
+    bounds = zone_ds.bounds
+    profile = zone_ds.profile
+    profile.update(blockxsize=1024, blockysize=1024, tiled=True)
+
+    for y in range(1985, 2022):
+        dx = rasterio.open(path_template + str(y) + "/rpms_" + str(y) + ".tif", chunks=(1, 1024, 1024), lock=False)
+        if not os.path.exists("./data/Zones6/"):
+            os.makedirs("./data/Zones6/")
+        op = f"./data/Zones6/rpms_{str(y)}_mean.tif"
+        with rasterio.open(op, 'w', **profile) as dst:
+            win = dx.window(bottom=bounds.bottom, right=bounds.right, top=bounds.top, left=bounds.left)
+            dat = dx.read(window=win)
+            dst.write(dat)
+
+    files = list()
+    for y in range(1985, 2022):
+        if y == 2012:
+            continue
+        f = f"./data/Zones6/rpms_{y}_mean.tif"
+        files.append(f)
+
+    meta = zone_ds.meta
+    meta.update(count = len(files))
+
+    with rasterio.open('./data/Zones6/rpms_stack.tif', 'w', **meta) as dst:
+        for id, layer in enumerate(files, start=1):
+            with rasterio.open(layer) as src1:
+                dst.write_band(id, src1.read(1))
+
+    acc = main_statistics('collect', zone_raster_path, data_raster_path, out_path)
 
     with open(stats_pickle_path, 'rb') as f:
         acc = pickle.load(f)
