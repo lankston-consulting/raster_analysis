@@ -170,7 +170,7 @@ def main_statistics(task, zone_file, data_file, out_files, queue_size=10, *args,
                            blockysize=BLOCKSIZE,
                            tiled=True,
                            dtype='float32',
-                           compress='LZW',
+                           compress='DEFLATE',
                            nodata=nodata)
 
             if task == 'degradation':
@@ -327,9 +327,15 @@ if __name__ == '__main__':
     zone_ds = rasterio.open("gs://fuelcast-data/degradation/BpsZonRobGb_wgs84_c.tif", chunks=(1024, 1024))
     bounds = zone_ds.bounds
     profile = zone_ds.profile
-    profile.update(blockxsize=1024, blockysize=1024, tiled=True)
+    profile.update(blockxsize=1024, blockysize=1024, tiled=True, compress='DEFLATE')
 
     for y in range(1985, 2022):
+        op = f"./data/BpsZonRobGb_wgs84_c/rpms_{str(y)}_mean.tif"
+        if os.path.exists(op):
+            print(f"{op} already exists, skipping.")
+            continue
+        if y == 2012:
+            continue
         dx = rasterio.open(path_template + str(y) + "/rpms_" + str(y) + ".tif", chunks=(1, 1024, 1024), lock=False)
         if not os.path.exists("./data/BpsZonRobGb_wgs84_c/"):
             os.makedirs("./data/BpsZonRobGb_wgs84_c/")
@@ -349,7 +355,7 @@ if __name__ == '__main__':
     meta = zone_ds.meta
     meta.update(count = len(files))
 
-    with rasterio.open('./data/BpsZonRobGb_wgs84_c/rpms_stack.tif', 'w', **meta) as dst:
+    with rasterio.open('./data/BpsZonRobGb_wgs84_c/rpms_stack.tif', 'w', **meta, **profile) as dst:
         for id, layer in enumerate(files, start=1):
             with rasterio.open(layer) as src1:
                 dst.write_band(id, src1.read(1))
