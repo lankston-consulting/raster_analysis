@@ -332,7 +332,7 @@ if __name__ == '__main__':
     for y in range(1985, 2022):
         op = f"./data/BpsZonRobGb_wgs84_c/rpms_{str(y)}_mean.tif"
         if os.path.exists(op):
-            print(f"{op} already exists, skipping.")
+            print(f"rpms_{str(y)}_mean.tif already exists, skipping extraction.")
             continue
         if y == 2012:
             continue
@@ -355,16 +355,20 @@ if __name__ == '__main__':
     meta = zone_ds.meta
     meta.update(count = len(files))
 
-    with rasterio.open('./data/BpsZonRobGb_wgs84_c/rpms_stack.tif', 'w', **meta, **profile) as dst:
+    print("Stacking raster")
+    with rasterio.open('./data/BpsZonRobGb_wgs84_c/rpms_stack.tif', 'w', **{**meta, **profile}) as dst:
         for id, layer in enumerate(files, start=1):
             with rasterio.open(layer) as src1:
                 dst.write_band(id, src1.read(1))
 
+
+    print("Calculating zonal statistics")
     acc = main_statistics('collect', zone_raster_path, data_raster_path, out_path, 60)
 
     with open(stats_pickle_path, 'rb') as f:
         acc = pickle.load(f)
 
+    print("Running degradation")
     start = datetime.now()
     main_statistics('degradation', zone_raster_path, data_raster_path, out_path, 60, acc=acc)
     stop = datetime.now()
