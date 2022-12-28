@@ -354,9 +354,10 @@ if __name__ == '__main__':
 
     meta = zone_ds.meta
     meta.update(count = len(files))
+    profile.update(count = len(files))
 
     print("Stacking raster")
-    with rasterio.open('./data/BpsZonRobGb_wgs84_c/rpms_stack.tif', 'w', **{**meta, **profile}) as dst:
+    with rasterio.open('./data/BpsZonRobGb_wgs84_c/rpms_stack.tif', 'w', **profile) as dst:
         for id, layer in enumerate(files, start=1):
             with rasterio.open(layer) as src1:
                 dst.write_band(id, src1.read(1))
