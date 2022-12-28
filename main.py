@@ -327,7 +327,7 @@ if __name__ == '__main__':
     zone_ds = rasterio.open("gs://fuelcast-data/degradation/BpsZonRobGb_wgs84_c.tif", chunks=(1024, 1024))
     bounds = zone_ds.bounds
     profile = zone_ds.profile
-    profile.update(blockxsize=1024, blockysize=1024, tiled=True, compress='DEFLATE')
+    profile.update(blockxsize=1024, blockysize=1024, tiled=True, compress='DEFLATE', predictor=2, BIGTIFF="Yes")
 
     for y in range(1985, 2022):
         op = f"./data/BpsZonRobGb_wgs84_c/rpms_{str(y)}_mean.tif"
