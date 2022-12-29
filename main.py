@@ -364,14 +364,14 @@ if __name__ == '__main__':
 
 
     print("Calculating zonal statistics")
-    acc = main_statistics('collect', zone_raster_path, data_raster_path, out_path, 60)
+    acc = main_statistics('collect', zone_raster_path, data_raster_path, out_path, 15)
 
     with open(stats_pickle_path, 'rb') as f:
         acc = pickle.load(f)
 
     print("Running degradation")
     start = datetime.now()
-    main_statistics('degradation', zone_raster_path, data_raster_path, out_path, 60, acc=acc)
+    main_statistics('degradation', zone_raster_path, data_raster_path, out_path, 15, acc=acc)
     stop = datetime.now()
     print('Total runtime:', (stop - start).seconds / 60, 'minutes')
 
