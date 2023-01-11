@@ -19,8 +19,12 @@ from ra import zonal_statistics
 
 # stats_pickle_path = '/mnt/hgfs/MCR/zs.pkl'
 
-zone_raster_path = 'gs://fuelcast-data/degradation/BpsZonRobGb_wgs84_c.tif'
-data_raster_path = './data/BpsZonRobGb_wgs84_c/rpms_stack.tif'
+zone_name = "bpslut4"
+gcs_degradation_path = "gs://fuelcast-data/degradation/"
+gcs_rpms_path = "gs://fuelcast-data/rpms/"
+
+zone_raster_path = f'{gcs_degradation_path}{zone_name}/{zone_name}_wgs84.tif'
+data_raster_path = f'./data/{zone_name}/rpms_stack.tif'
 dummy_path = './test.tif'
 
 out_path = ['./output/mean_t.tif', './output/mean_p_adj.tif',
@@ -323,57 +327,58 @@ def main_statistics(task, zone_file, data_file, out_files, queue_size=10, *args,
 
 if __name__ == '__main__':
 
-    path_template = "gs://fuelcast-data/rpms/"
-    zone_ds = rasterio.open("gs://fuelcast-data/degradation/BpsZonRobGb_wgs84_c.tif", chunks=(1024, 1024))
-    bounds = zone_ds.bounds
-    profile = zone_ds.profile
-    profile.update(blockxsize=1024, blockysize=1024, tiled=True, compress='DEFLATE', predictor=2, BIGTIFF="Yes")
 
-    for y in range(1985, 2022):
-        op = f"./data/BpsZonRobGb_wgs84_c/rpms_{str(y)}_mean.tif"
-        if os.path.exists(op):
-            print(f"rpms_{str(y)}_mean.tif already exists, skipping extraction.")
-            continue
-        if y == 2012:
-            continue
-        dx = rasterio.open(path_template + str(y) + "/rpms_" + str(y) + ".tif", chunks=(1, 1024, 1024), lock=False)
-        if not os.path.exists("./data/BpsZonRobGb_wgs84_c/"):
-            os.makedirs("./data/BpsZonRobGb_wgs84_c/")
-        op = f"./data/BpsZonRobGb_wgs84_c/rpms_{str(y)}_mean.tif"
-        with rasterio.open(op, 'w', **profile) as dst:
-            win = dx.window(bottom=bounds.bottom, right=bounds.right, top=bounds.top, left=bounds.left)
-            dat = dx.read(window=win)
-            dst.write(dat)
+    with rasterio.Env(GDAL_NUM_THREADS="ALL_CPUS", verbose=2):
+        zone_ds = rasterio.open(zone_raster_path, chunks=(1024, 1024))
+        bounds = zone_ds.bounds
+        profile = zone_ds.profile
+        profile.update(blockxsize=1024, blockysize=1024, tiled=True, compress='DEFLATE', predictor=2, BIGTIFF="Yes")
 
-    files = list()
-    for y in range(1985, 2022):
-        if y == 2012:
-            continue
-        f = f"./data/BpsZonRobGb_wgs84_c/rpms_{y}_mean.tif"
-        files.append(f)
+        for y in range(1985, 2022):
+            op = f"./data/{zone_name}/rpms_{str(y)}_mean.tif"
+            if os.path.exists(op):
+                print(f"rpms_{str(y)}_mean.tif already exists, skipping extraction.")
+                continue
+            if y == 2012:
+                continue
+            dx = rasterio.open(gcs_rpms_path + str(y) + "/rpms_" + str(y) + ".tif", chunks=(1, 1024, 1024), lock=False)
+            if not os.path.exists("./data/{zone_name}/"):
+                os.makedirs("./data/{zone_name}/")
+            op = f"./data/{zone_name}/rpms_{str(y)}_mean.tif"
+            with rasterio.open(op, 'w', **profile) as dst:
+                win = dx.window(bottom=bounds.bottom, right=bounds.right, top=bounds.top, left=bounds.left)
+                dat = dx.read(window=win)
+                dst.write(dat)
 
-    meta = zone_ds.meta
-    meta.update(count = len(files))
-    profile.update(count = len(files))
+        files = list()
+        for y in range(1985, 2022):
+            if y == 2012:
+                continue
+            f = f"./data/{zone_name}/rpms_{y}_mean.tif"
+            files.append(f)
 
-    print("Stacking raster")
-    with rasterio.open('./data/BpsZonRobGb_wgs84_c/rpms_stack.tif', 'w', **profile) as dst:
-        for id, layer in enumerate(files, start=1):
-            with rasterio.open(layer) as src1:
-                dst.write_band(id, src1.read(1))
+        meta = zone_ds.meta
+        meta.update(count = len(files))
+        profile.update(count = len(files))
+
+        print("Stacking raster")
+        with rasterio.open('./data/{zone_name}/rpms_stack.tif', 'w', **profile) as dst:
+            for id, layer in enumerate(files, start=1):
+                with rasterio.open(layer) as src1:
+                    dst.write_band(id, src1.read(1))
 
 
-    print("Calculating zonal statistics")
-    acc = main_statistics('collect', zone_raster_path, data_raster_path, out_path, 15)
+        print("Calculating zonal statistics")
+        acc = main_statistics('collect', zone_raster_path, data_raster_path, out_path, 60)
 
-    with open(stats_pickle_path, 'rb') as f:
-        acc = pickle.load(f)
+        with open(stats_pickle_path, 'rb') as f:
+            acc = pickle.load(f)
 
-    print("Running degradation")
-    start = datetime.now()
-    main_statistics('degradation', zone_raster_path, data_raster_path, out_path, 15, acc=acc)
-    stop = datetime.now()
-    print('Total runtime:', (stop - start).seconds / 60, 'minutes')
+        print("Running degradation")
+        start = datetime.now()
+        main_statistics('degradation', zone_raster_path, data_raster_path, out_path, 60, acc=acc)
+        stop = datetime.now()
+        print('Total runtime:', (stop - start).seconds / 60, 'minutes')
 
-    print('Finished')
+        print('Finished')
 
