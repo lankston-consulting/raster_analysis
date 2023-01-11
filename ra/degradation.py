@@ -1,6 +1,7 @@
 import numpy as np
 import rasterio
 
+
 class Degradation(object):
     def __init__(self, *args, **kwargs):
         # self.zone_raster_path = kwargs['zone_raster']
@@ -8,7 +9,6 @@ class Degradation(object):
         # TODO check for banded raster vs list of rasters
         # self.data_raster_path = kwargs['data_raster']
         return
-
 
     def degradation(self, data):
 

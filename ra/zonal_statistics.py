@@ -6,7 +6,7 @@ import warnings
 warnings.filterwarnings("ignore", category=RuntimeWarning)
 warnings.filterwarnings("ignore", category=UserWarning)
 
-nodata = -3.4E38
+nodata = -3.4e38
 
 
 class Stat(object):
@@ -27,7 +27,9 @@ class Stat(object):
             self.mean = np.ma.mean(self.data, axis=0)
             self.std = np.ma.std(self.data, axis=0)
             self.n = np.ma.count(self.data, axis=0)
-            self.n = np.ma.masked_where(self.n <= 0, self.n)  # n of 0 screws up combining groups later
+            self.n = np.ma.masked_where(
+                self.n <= 0, self.n
+            )  # n of 0 screws up combining groups later
 
             # Clean up the object to reduce memory footprint
             del self.data
@@ -65,7 +67,10 @@ class StatAccumulator(object):
             old_stats = self.statistics[zone]
 
             tn = old_stats.n + new_stats.n
-            tmean = np.ma.add(old_stats.n * old_stats.mean, new_stats.n * new_stats.mean) / tn
+            tmean = (
+                np.ma.add(old_stats.n * old_stats.mean, new_stats.n * new_stats.mean)
+                / tn
+            )
 
             # tsd = np.ma.sqrt(((old_stats.n-1) * np.power(old_stats.std, 2) + (new_stats.n - 1) * np.power(new_stats.std, 2) + old_stats.n * new_stats.n / (old_stats.n + new_stats.n) * (np.power(old_stats.mean, 2) + np.power(new_stats.mean, 2) - 2 * old_stats.mean * new_stats.mean)) / (old_stats.n + new_stats.n - 1))
 
@@ -137,7 +142,12 @@ class StatAccumulator(object):
             tn, tx, txx = collect(data, tn, tx, txx)
 
         tmean = tx / tn
-        tsd = np.ma.sqrt(np.ma.divide(np.ma.subtract(txx, np.ma.divide(np.ma.power(tx, 2), tn)), np.ma.add(tn, -1)))
+        tsd = np.ma.sqrt(
+            np.ma.divide(
+                np.ma.subtract(txx, np.ma.divide(np.ma.power(tx, 2), tn)),
+                np.ma.add(tn, -1),
+            )
+        )
 
         old_stats = self.statistics[zone][0]
         old_stats.mean = tmean
@@ -153,7 +163,7 @@ class StatAccumulator(object):
 
         def chunk_gen(lst, n):
             for i in range(0, len(lst), n):
-                yield lst[i:i+n]
+                yield lst[i : i + n]
 
         def merge_chunk(indexes):
             key_list = list(self.statistics.keys())
@@ -174,16 +184,18 @@ class StatAccumulator(object):
         del self.merged_stats
         return
 
-    def write(self, path='./output/zone_stats.csv'):
+    def write(self, path="./output/zone_stats.csv"):
 
-        with open(path, 'w') as f:
-            header = 'zone, year, mean, std, n\n'
+        with open(path, "w") as f:
+            header = "zone, year, mean, std, n\n"
             f.write(header)
 
             for z in self.statistics:
                 data = self.statistics[z]
                 for i in range(len(data.mean)):
-                    line = '{0}, {1}, {2}, {3}, {4}\n'.format(z, i, data.mean[i], data.std[i], data.n[i])
+                    line = "{0}, {1}, {2}, {3}, {4}\n".format(
+                        z, i, data.mean[i], data.std[i], data.n[i]
+                    )
                     f.write(line)
 
 
@@ -196,15 +208,15 @@ class ZonalStatistics(object):
 
         stats = dict()
 
-        I = args[0]['zone_data'].shape[0]
-        J = args[0]['zone_data'].shape[1]
-        K = args[0]['zone_data'].shape[2]
+        I = args[0]["zone_data"].shape[0]
+        J = args[0]["zone_data"].shape[1]
+        K = args[0]["zone_data"].shape[2]
 
         for i in range(I):
             for j in range(J):
                 for k in range(K):
-                    zone = args[0]['zone_data'][i, j, k]
-                    data = args[0]['val_data'][:, j, k]
+                    zone = args[0]["zone_data"][i, j, k]
+                    data = args[0]["val_data"][:, j, k]
 
                     if zone > 0:
                         if zone not in stats:
@@ -215,27 +227,27 @@ class ZonalStatistics(object):
 
     def t_test(self, *args, **kwargs):
 
-        I = args[0]['zone_data'].shape[0]
-        J = args[0]['zone_data'].shape[1]
-        K = args[0]['zone_data'].shape[2]
+        I = args[0]["zone_data"].shape[0]
+        J = args[0]["zone_data"].shape[1]
+        K = args[0]["zone_data"].shape[2]
 
-        output = np.empty((4, J, K), dtype='float32')
+        output = np.empty((4, J, K), dtype="float32")
         output.fill(nodata)
 
         for i in range(I):
             for j in range(J):
                 for k in range(K):
-                    zone = args[0]['zone_data'][i, j, k]
-                    data = args[0]['val_data'][:, j, k]
+                    zone = args[0]["zone_data"][i, j, k]
+                    data = args[0]["val_data"][:, j, k]
 
                     if zone > 0:
-                        stat = args[0]['statistics'].statistics[zone]
+                        stat = args[0]["statistics"].statistics[zone]
                         try:
                             vals = self._t_test_strict_r_logic(stat, data)
                             if vals is not None:
                                 output[:, j, k] = vals
                         except Exception as ex:
-                            #print(ex)
+                            # print(ex)
                             pass
 
         # This should be done all at once at the end, as it uses relative magnitudes of p to correct
@@ -281,7 +293,7 @@ class ZonalStatistics(object):
         # Get the mean difference
         mean_diff = i_mean - p_mean
         # Standard error difference
-        se = np.ma.sqrt(i_se ** 2, p_se ** 2)
+        se = np.ma.sqrt(i_se**2, p_se**2)
 
         # t test
         t = mean_diff / se
@@ -333,7 +345,7 @@ class ZonalStatistics(object):
         # t = mean_diff / i_se
 
         # Skip doing the calculations manually, just do a basic t test
-        t, p = st.ttest_rel(nan_data, p_mean_list, nan_policy='omit')
+        t, p = st.ttest_rel(nan_data, p_mean_list, nan_policy="omit")
 
         if np.ma.is_masked(t):
             return None
@@ -350,12 +362,12 @@ class ZonalStatistics(object):
         # Nan years where there's missing data
         mask_years = np.ma.array(years.astype(float), mask=p_mean_list.mask)
         nan_years = mask_years.filled(np.nan)
-        pop_trend_model = GLSAR(p_mean_list, nan_years, missing='drop')
+        pop_trend_model = GLSAR(p_mean_list, nan_years, missing="drop")
         pop_trend_result = pop_trend_model.fit()
 
         mask_years = np.ma.array(years.astype(float), mask=data.mask)
         nan_years = mask_years.filled(np.nan)
-        ind_trend_model = GLSAR(data, nan_years, missing='drop')
+        ind_trend_model = GLSAR(data, nan_years, missing="drop")
         ind_trend_result = ind_trend_model.fit()
 
         pop_slope = pop_trend_result.params[0]
@@ -379,5 +391,3 @@ class ZonalStatistics(object):
         vals = np.array([t, p, slope_t[0], slope_p[0]])
 
         return vals
-
-

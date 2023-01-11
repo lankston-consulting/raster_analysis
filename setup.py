@@ -5,5 +5,5 @@ setup(
     name="RasterAnalysis",
     version="0.1",
     packages=find_namespace_packages(),
-    ext_modules=cythonize("ra/*.pyx")
+    ext_modules=cythonize("ra/*.pyx"),
 )
