@@ -361,11 +361,16 @@ if __name__ == "__main__":
             op = od + f"/rpms_{str(y)}_mean.tif"
             if not os.path.exists(od):
                 os.makedirs(od)
+
+            if y == 2012:
+                continue
+
             if os.path.exists(op):
                 print(f"rpms_{str(y)}_mean.tif already exists, skipping extraction.")
                 continue
-            if y == 2012:
-                continue
+            else:
+                print(f"Downloading rpms_{str(y)}_mean.tif")
+
             dx = rasterio.open(
                 gcs_rpms_path + str(y) + "/rpms_" + str(y) + ".tif",
                 chunks=(1, 1024, 1024),
