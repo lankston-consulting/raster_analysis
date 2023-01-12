@@ -9,11 +9,11 @@ from ra import degradation
 from ra import zonal_statistics
 
 
-zone_name = "bpslut4"
+zone_name = "Zones6"
 gcs_degradation_path = "gs://fuelcast-data/degradation/"
 gcs_rpms_path = "gs://fuelcast-data/rpms/"
 
-zone_raster_path = f"{gcs_degradation_path}{zone_name}/{zone_name}_wgs84.tif"
+zone_raster_path = f"{gcs_degradation_path}{zone_name}/{zone_name}.tif" 
 data_raster_path = f"./data/{zone_name}/rpms_stack.tif"
 dummy_path = "./test.tif"
 
