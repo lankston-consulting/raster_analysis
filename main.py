@@ -27,7 +27,7 @@ out_path = [
 if not os.path.exists("./output/"):
     os.makedirs("./output/")
 
-stats_pickle_path = "./output/{zone_name}_zs.pkl"
+stats_pickle_path = f"./output/{zone_name}_zs.pkl"
 
 
 BLOCKSIZE = 1024
