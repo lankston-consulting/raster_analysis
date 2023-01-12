@@ -9,7 +9,7 @@ from ra import degradation
 from ra import zonal_statistics
 
 
-zone_name = "Zones6"
+zone_name = "BpsZonRobGb_wgs84_c"
 gcs_degradation_path = "gs://fuelcast-data/degradation/"
 gcs_rpms_path = "gs://fuelcast-data/rpms/"
 
