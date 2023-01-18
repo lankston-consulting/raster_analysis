@@ -13,7 +13,7 @@ zone_name = "bpslut4"
 gcs_degradation_path = "gs://fuelcast-data/degradation/"
 gcs_rpms_path = "gs://fuelcast-data/rpms/"
 
-zone_raster_path = f"{gcs_degradation_path}{zone_name}/{zone_name}.tif" 
+zone_raster_path = f"{gcs_degradation_path}{zone_name}/{zone_name}_wgs84.tif" 
 data_raster_path = f"./data/{zone_name}/rpms_stack.tif"
 dummy_path = "./test.tif"
 
@@ -343,7 +343,7 @@ def main_statistics(
 
 if __name__ == "__main__":
 
-    with rasterio.Env(GDAL_NUM_THREADS="ALL_CPUS", verbose=2, GOOGLE_APPLICATION_CREDENTIALS=os.getenv("GOOGLE_APPLICATION_CREDENTIALS")):
+    with rasterio.Env(GDAL_NUM_THREADS="ALL_CPUS", verbose=2, GOOGLE_APPLICATION_CREDENTIALS=os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "fuelcast-storage-credentials.json")):
         zone_ds = rasterio.open(zone_raster_path, chunks=(1024, 1024))
         bounds = zone_ds.bounds
         profile = zone_ds.profile
@@ -356,12 +356,12 @@ if __name__ == "__main__":
             BIGTIFF="Yes",
         )
 
+        od = f"./data/{zone_name}"
+        if not os.path.exists(od):
+            os.makedirs(od)
+
         # for y in range(1985, 2022):
-        #     od = f"./data/{zone_name}"
         #     op = od + f"/rpms_{str(y)}_mean.tif"
-            
-        #     if not os.path.exists(od):
-        #         os.makedirs(od)
 
         #     if y == 2012:
         #         continue
