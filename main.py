@@ -9,7 +9,7 @@ from ra import degradation
 from ra import zonal_statistics
 
 
-zone_name = "BpsZonRobGb_wgs84_c"
+zone_name = "bpslut4"
 gcs_degradation_path = "gs://fuelcast-data/degradation/"
 gcs_rpms_path = "gs://fuelcast-data/rpms/"
 
@@ -343,7 +343,7 @@ def main_statistics(
 
 if __name__ == "__main__":
 
-    with rasterio.Env(GDAL_NUM_THREADS="ALL_CPUS", verbose=2):
+    with rasterio.Env(GDAL_NUM_THREADS="ALL_CPUS", verbose=2, GOOGLE_APPLICATION_CREDENTIALS=os.getenv("GOOGLE_APPLICATION_CREDENTIALS")):
         zone_ds = rasterio.open(zone_raster_path, chunks=(1024, 1024))
         bounds = zone_ds.bounds
         profile = zone_ds.profile
@@ -356,42 +356,44 @@ if __name__ == "__main__":
             BIGTIFF="Yes",
         )
 
-        for y in range(1985, 2022):
-            od = f"./data/{zone_name}"
-            op = od + f"/rpms_{str(y)}_mean.tif"
-            if not os.path.exists(od):
-                os.makedirs(od)
-
-            if y == 2012:
-                continue
-
-            if os.path.exists(op):
-                print(f"rpms_{str(y)}_mean.tif already exists, skipping extraction.")
-                continue
-            else:
-                print(f"Downloading rpms_{str(y)}_mean.tif")
-
-            dx = rasterio.open(
-                gcs_rpms_path + str(y) + "/rpms_" + str(y) + ".tif",
-                chunks=(1, 1024, 1024),
-                lock=False,
-            )
+        # for y in range(1985, 2022):
+        #     od = f"./data/{zone_name}"
+        #     op = od + f"/rpms_{str(y)}_mean.tif"
             
-            with rasterio.open(op, "w", **profile) as dst:
-                win = dx.window(
-                    bottom=bounds.bottom,
-                    right=bounds.right,
-                    top=bounds.top,
-                    left=bounds.left,
-                )
-                dat = dx.read(window=win)
-                dst.write(dat)
+        #     if not os.path.exists(od):
+        #         os.makedirs(od)
+
+        #     if y == 2012:
+        #         continue
+
+        #     if os.path.exists(op):
+        #         print(f"rpms_{str(y)}_mean.tif already exists, skipping extraction.")
+        #         continue
+        #     else:
+        #         print(f"Downloading rpms_{str(y)}_mean.tif")
+
+        #     dx = rasterio.open(
+        #         gcs_rpms_path + str(y) + "/rpms_" + str(y) + ".tif",
+        #         chunks=(1, 1024, 1024),
+        #         lock=False,
+        #     )
+            
+        #     with rasterio.open(op, "w", **profile) as dst:
+        #         win = dx.window(
+        #             bottom=bounds.bottom,
+        #             right=bounds.right,
+        #             top=bounds.top,
+        #             left=bounds.left,
+        #         )
+        #         dat = dx.read(window=win)
+        #         dst.write(dat)
 
         files = list()
         for y in range(1985, 2022):
             if y == 2012:
                 continue
-            f = f"./data/{zone_name}/rpms_{y}_mean.tif"
+            # f = f"./data/{zone_name}/rpms_{y}_mean.tif"
+            f = f"gs://fuelcast-data/rpms/{y}/rpms_{y}.tif"
             files.append(f)
 
         meta = zone_ds.meta
@@ -400,9 +402,17 @@ if __name__ == "__main__":
 
         print("Stacking raster")
         with rasterio.open(f"./data/{zone_name}/rpms_stack.tif", "w", **profile) as dst:
+            print(f"out: {dst} || {dst.bounds}")
             for id, layer in enumerate(files, start=1):
-                with rasterio.open(layer) as src1:
-                    dst.write_band(id, src1.read(1))
+                with rasterio.open(layer, chunks=(1, 1024, 1024), lock=False) as src_ds:
+                    win = src_ds.window(
+                        bottom=bounds.bottom,
+                        right=bounds.right,
+                        top=bounds.top,
+                        left=bounds.left,
+                    )
+                    print(f"in: {layer} || {win}")
+                    dst.write_band(id, src_ds.read(1, window=win))
 
         print("Calculating zonal statistics")
         acc = main_statistics(
