@@ -349,12 +349,11 @@ async def raster_stacker(in_ds, out_ds, bounds):
             top=bounds.top,
             left=bounds.left,
         )
-        print(f"in: {layer} || {win}")
+        print(f"in: {in_ds} || {win}")
         out_ds.write_band(id, src_ds.read(1, window=win))
 
 
-if __name__ == "__main__":
-
+async def main_run():
     with rasterio.Env(GDAL_NUM_THREADS="ALL_CPUS", verbose=2, GOOGLE_APPLICATION_CREDENTIALS=os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "fuelcast-storage-credentials.json")):
         zone_ds = rasterio.open(zone_raster_path, chunks=(1024, 1024))
         bounds = zone_ds.bounds
@@ -394,19 +393,21 @@ if __name__ == "__main__":
             with rasterio.open(stack_path, "w", **profile) as dst:
                 print(f"out: {dst} || {dst.bounds}")
 
-                # background_tasks = set()
+                background_tasks = set()
 
-                with asyncio.TaskGroup() as tg:
-                    for id, layer in enumerate(files, start=1):
-                        task = tg.create_task(raster_stacker(layer, dst, bounds))
+                # with asyncio.TaskGroup() as tg: # Turns out this is a Python 3.11+ thing
+                for id, layer in enumerate(files, start=1):
+                    # task = tg.create_task(raster_stacker(layer, dst, bounds))
+                    print(f"in: {layer}")
+                    task = asyncio.create_task(raster_stacker(layer, dst, bounds))
                         
-                        # Add task to the set. This creates a strong reference.
-                        # background_tasks.add(task)
+                    # Add task to the set. This creates a strong reference.
+                    background_tasks.add(task)
 
-                        # To prevent keeping references to finished tasks forever,
-                        # make each task remove its own reference from the set after
-                        # completion:
-                        # task.add_done_callback(background_tasks.discard)
+                    # To prevent keeping references to finished tasks forever,
+                    # make each task remove its own reference from the set after
+                    # completion:
+                    task.add_done_callback(background_tasks.discard)
                         
                         # with rasterio.open(layer, chunks=(1, 1024, 1024), lock=False) as src_ds:
                         #     win = src_ds.window(
@@ -417,6 +418,10 @@ if __name__ == "__main__":
                         #     )
                         #     print(f"in: {layer} || {win}")
                         #     dst.write_band(id, src_ds.read(1, window=win))
+
+                W = await asyncio.gather(background_tasks)
+                print("W :: ", W)
+                
 
         print("Calculating zonal statistics")
         acc = main_statistics(
@@ -435,3 +440,7 @@ if __name__ == "__main__":
         print("Total runtime:", (stop - start).seconds / 60, "minutes")
 
         print("Finished")
+
+if __name__ == "__main__":
+    asyncio.run(main_run())
+    
