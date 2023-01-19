@@ -4,16 +4,17 @@ from datetime import datetime
 import os
 import pickle
 import rasterio
+import asyncio
 
 from ra import degradation
 from ra import zonal_statistics
 
 
-zone_name = "bpslut4"
+zone_name = "BpsZonRobGb_wgs84_nc"
 gcs_degradation_path = "gs://fuelcast-data/degradation/"
 gcs_rpms_path = "gs://fuelcast-data/rpms/"
 
-zone_raster_path = f"{gcs_degradation_path}{zone_name}/{zone_name}_wgs84.tif" 
+zone_raster_path = f"{gcs_degradation_path}{zone_name}/{zone_name}.tif" 
 data_raster_path = f"./data/{zone_name}/rpms_stack.tif"
 dummy_path = "./test.tif"
 
@@ -340,6 +341,17 @@ def main_statistics(
 
         return accumulator
 
+async def raster_stacker(in_ds, out_ds, bounds):
+    with rasterio.open(in_ds, chunks=(1, 1024, 1024), lock=False) as src_ds:
+        win = src_ds.window(
+            bottom=bounds.bottom,
+            right=bounds.right,
+            top=bounds.top,
+            left=bounds.left,
+        )
+        print(f"in: {layer} || {win}")
+        out_ds.write_band(id, src_ds.read(1, window=win))
+
 
 if __name__ == "__main__":
 
@@ -360,34 +372,6 @@ if __name__ == "__main__":
         if not os.path.exists(od):
             os.makedirs(od)
 
-        # for y in range(1985, 2022):
-        #     op = od + f"/rpms_{str(y)}_mean.tif"
-
-        #     if y == 2012:
-        #         continue
-
-        #     if os.path.exists(op):
-        #         print(f"rpms_{str(y)}_mean.tif already exists, skipping extraction.")
-        #         continue
-        #     else:
-        #         print(f"Downloading rpms_{str(y)}_mean.tif")
-
-        #     dx = rasterio.open(
-        #         gcs_rpms_path + str(y) + "/rpms_" + str(y) + ".tif",
-        #         chunks=(1, 1024, 1024),
-        #         lock=False,
-        #     )
-            
-        #     with rasterio.open(op, "w", **profile) as dst:
-        #         win = dx.window(
-        #             bottom=bounds.bottom,
-        #             right=bounds.right,
-        #             top=bounds.top,
-        #             left=bounds.left,
-        #         )
-        #         dat = dx.read(window=win)
-        #         dst.write(dat)
-
         files = list()
         for y in range(1985, 2022):
             if y == 2012:
@@ -401,18 +385,38 @@ if __name__ == "__main__":
         profile.update(count=len(files))
 
         print("Stacking raster")
-        with rasterio.open(f"./data/{zone_name}/rpms_stack.tif", "w", **profile) as dst:
-            print(f"out: {dst} || {dst.bounds}")
-            for id, layer in enumerate(files, start=1):
-                with rasterio.open(layer, chunks=(1, 1024, 1024), lock=False) as src_ds:
-                    win = src_ds.window(
-                        bottom=bounds.bottom,
-                        right=bounds.right,
-                        top=bounds.top,
-                        left=bounds.left,
-                    )
-                    print(f"in: {layer} || {win}")
-                    dst.write_band(id, src_ds.read(1, window=win))
+
+        stack_path = f"./data/{zone_name}/rpms_stack.tif"
+
+        if os.path.exists(stack_path):
+            print(f"Stacked raster {stack_path} already exists.")
+        else:
+            with rasterio.open(stack_path, "w", **profile) as dst:
+                print(f"out: {dst} || {dst.bounds}")
+
+                # background_tasks = set()
+
+                with asyncio.TaskGroup() as tg:
+                    for id, layer in enumerate(files, start=1):
+                        task = tg.create_task(raster_stacker(layer, dst, bounds))
+                        
+                        # Add task to the set. This creates a strong reference.
+                        # background_tasks.add(task)
+
+                        # To prevent keeping references to finished tasks forever,
+                        # make each task remove its own reference from the set after
+                        # completion:
+                        # task.add_done_callback(background_tasks.discard)
+                        
+                        # with rasterio.open(layer, chunks=(1, 1024, 1024), lock=False) as src_ds:
+                        #     win = src_ds.window(
+                        #         bottom=bounds.bottom,
+                        #         right=bounds.right,
+                        #         top=bounds.top,
+                        #         left=bounds.left,
+                        #     )
+                        #     print(f"in: {layer} || {win}")
+                        #     dst.write_band(id, src_ds.read(1, window=win))
 
         print("Calculating zonal statistics")
         acc = main_statistics(
