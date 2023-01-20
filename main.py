@@ -31,7 +31,7 @@ if not os.path.exists("./output/"):
 stats_pickle_path = f"./output/{zone_name}_zs.pkl"
 
 
-BLOCKSIZE = 1024
+BLOCKSIZE = 8196
 
 nodata = -3.4e38
 
@@ -408,9 +408,13 @@ async def main_run():
                 
 
         print("Calculating zonal statistics")
-        acc = main_statistics(
-            "collect", zone_raster_path, data_raster_path, out_path, 60
-        )
+
+        if os.path.exists(stats_pickle_path):
+            print("Found existing statistics file. Loading.")
+        else:
+            acc = main_statistics(
+                "collect", zone_raster_path, data_raster_path, out_path, 60
+            )
 
         with open(stats_pickle_path, "rb") as f:
             acc = pickle.load(f)
