@@ -391,20 +391,13 @@ async def main_run():
         if os.path.exists(stack_path):
             print(f"Stacked raster {stack_path} already exists.")
         else:
-            with BoundedProcessPoolExecutor(max_workers=20) as executor:
-                with rasterio.open(stack_path, "w", **profile) as dst:
-                    print(f"out: {dst} || {dst.bounds}")
+            with rasterio.open(stack_path, "w", **profile) as dst:
+                print(f"out: {dst} || {dst.bounds}")
 
-                    background_tasks = set()
-
-                    for id, layer in enumerate(files, start=1):
-                        print(f"in: {layer}")
-                        future = executor.submit(raster_stacker, layer, dst, bounds)
-                        
-                        # Add task to the set. This creates a strong reference.
-                        background_tasks.add(future)
-
-                    concurrent.futures.wait(background_tasks)
+                for id, layer in enumerate(files, start=1):
+                    print(f"in: {layer}")
+                    raster_stacker(layer, dst, bounds)
+                
                 
 
         print("Calculating zonal statistics")
