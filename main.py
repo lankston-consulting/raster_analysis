@@ -5,6 +5,7 @@ import os
 import pickle
 import rasterio
 import asyncio
+from config import gch
 
 from ra import degradation
 from ra import zonal_statistics
@@ -331,6 +332,11 @@ def main_statistics(
                             pickle.dump(accumulator, f)
 
                     else:
+                        print("uploading")
+                        gch.upload_blob("fuelcast-data",mean_t_raster,"degradation/BpsZonRobGb_wgs84_nc/mean_t.tif")
+                        gch.upload_blob("fuelcast-data",mean_p_raster,"degradation/BpsZonRobGb_wgs84_nc/mean_p_adj.tif")
+                        gch.upload_blob("fuelcast-data",slope_t_raster,"degradation/BpsZonRobGb_wgs84_nc/slope_t.tif")
+                        gch.upload_blob("fuelcast-data",slope_p_raster,"degradation/BpsZonRobGb_wgs84_nc/slope_p_adj.tif")
                         mean_t_raster.close()
                         mean_p_raster.close()
                         slope_t_raster.close()
