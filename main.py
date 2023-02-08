@@ -348,7 +348,7 @@ def main_statistics(
         return accumulator
 
 # async def raster_stacker(in_ds, out_ds, bounds):
-def raster_stacker(in_ds, out_ds, bounds):
+def raster_stacker(id, in_ds, out_ds, bounds):
     with rasterio.open(in_ds, chunks=(1, 1024, 1024), lock=False) as src_ds:
         win = src_ds.window(
             bottom=bounds.bottom,
@@ -402,7 +402,7 @@ async def main_run():
 
                 for id, layer in enumerate(files, start=1):
                     print(f"in: {layer}")
-                    raster_stacker(layer, dst, bounds)
+                    raster_stacker(id, layer, dst, bounds)
                 
                 
 
