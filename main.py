@@ -1,3 +1,19 @@
+"""
+This code is designed to perform a series of operations on raster data, including stacking raster files, calculating zonal statistics, and running a degradation process. 
+The code uses the rasterio library for raster data manipulation, concurrent.futures for parallel processing, and asyncio for asynchronous operations.
+
+The main_process function is designed to process data in a way that it constantly tries to write to the destination raster. This is suitable for tasks that are done in one pass of the data.
+
+The main_statistics function calculates the statistics for the given task. It uses the BoundedProcessPoolExecutor to manage a pool of worker processes that can execute calls asynchronously.
+
+The raster_stacker function stacks raster files. It reads a raster file from the input dataset within the specified bounds and writes it to the output dataset.
+
+The main_run function is the main function that runs the program. It sets up the environment, stacks the raster files, calculates the zonal statistics, runs the degradation process, and prints the total runtime. It uses asyncio.run to run the main_run coroutine, blocking until the coroutine is complete, and then returns the result.
+
+The if __name__ == "__main__": line at the end of the script ensures that the main_run function is run only when this script is run directly, and not when it is imported as a module.
+"""
+
+# Import necessary libraries
 from bounded_pool_executor import BoundedProcessPoolExecutor
 import concurrent.futures
 from datetime import datetime
@@ -7,18 +23,21 @@ import rasterio
 import asyncio
 from config import gch
 
+# Import custom modules
 from ra import degradation
 from ra import zonal_statistics
 
-
-zone_name = "BpsZonRobGb_wgs84_nc"
+# Define constants
+zone_name = "BpsSplit"
 gcs_degradation_path = "gs://fuelcast-data/degradation/"
 gcs_rpms_path = "gs://fuelcast-data/rpms/"
 
-zone_raster_path = f"{gcs_degradation_path}{zone_name}/{zone_name}.tif" 
+# Define paths
+zone_raster_path = f"{gcs_degradation_path}{zone_name}/{zone_name}_c0.tif" 
 data_raster_path = f"./data/{zone_name}/rpms_stack.tif"
 dummy_path = "./test.tif"
 
+# Define paths
 out_path = [
     f"./output/{zone_name}_mean_t.tif",
     f"./output/{zone_name}_mean_p_adj.tif",
@@ -26,28 +45,28 @@ out_path = [
     f"./output/{zone_name}_slope_p_adj.tif",
 ]
 
+# Define path for pickle file to store statistics
 if not os.path.exists("./output/"):
     os.makedirs("./output/")
 
 stats_pickle_path = f"./output/{zone_name}_zs.pkl"
 
-
+# Main function to process data
 BLOCKSIZE = 8196
-
 nodata = -3.4e38
 
-
+# Main function to process data
 def main_process(task, zone_file, data_file, out_file, queue_size=1):
     """
     This function constantly tries to write to the destination raster, which makes it suitable for tasks that are
     done in one pass of the data. For things requiring multiple passes, use a function that doesn't write until
     the data processing is done.
-    :param task:
-    :param zone_file:
-    :param data_file:
-    :param out_file:
-    :param queue_size:
-    :return:
+    :param task: The task to be performed
+    :param zone_file: The zone file path
+    :param data_file: The data file path
+    :param out_file: The output file path
+    :param queue_size: The maximum number of workers for the executor
+    :return: None
     """
     deg = degradation.Degradation()
 
@@ -154,9 +173,21 @@ def main_process(task, zone_file, data_file, out_file, queue_size=1):
     return
 
 
+# Function to calculate statistics
 def main_statistics(
     task, zone_file, data_file, out_files, queue_size=10, *args, **kwargs
 ):
+    """
+    This function calculates the statistics for the given task.
+    :param task: The task to be performed
+    :param zone_file: The zone file path
+    :param data_file: The data file path
+    :param out_files: The output file paths
+    :param queue_size: The maximum number of workers for the executor
+    :param args: Additional arguments
+    :param kwargs: Additional keyword arguments
+    :return: The accumulator object with the calculated statistics
+    """
     zs = zonal_statistics.ZonalStatistics()
 
     if task == "collect":
@@ -332,11 +363,6 @@ def main_statistics(
                             pickle.dump(accumulator, f)
 
                     else:
-                        print("uploading")
-                        gch.upload_blob("fuelcast-data",mean_t_raster,"degradation/BpsZonRobGb_wgs84_nc/mean_t.tif")
-                        gch.upload_blob("fuelcast-data",mean_p_raster,"degradation/BpsZonRobGb_wgs84_nc/mean_p_adj.tif")
-                        gch.upload_blob("fuelcast-data",slope_t_raster,"degradation/BpsZonRobGb_wgs84_nc/slope_t.tif")
-                        gch.upload_blob("fuelcast-data",slope_p_raster,"degradation/BpsZonRobGb_wgs84_nc/slope_p_adj.tif")
                         mean_t_raster.close()
                         mean_p_raster.close()
                         slope_t_raster.close()
@@ -347,8 +373,17 @@ def main_statistics(
 
         return accumulator
 
+# Function to stack raster files
 # async def raster_stacker(in_ds, out_ds, bounds):
 def raster_stacker(id, in_ds, out_ds, bounds):
+    """
+    This function stacks raster files.
+    :param id: The id of the raster file
+    :param in_ds: The input dataset
+    :param out_ds: The output dataset
+    :param bounds: The bounds for the raster file
+    :return: None
+    """
     with rasterio.open(in_ds, chunks=(1, 1024, 1024), lock=False) as src_ds:
         win = src_ds.window(
             bottom=bounds.bottom,
@@ -359,8 +394,13 @@ def raster_stacker(id, in_ds, out_ds, bounds):
         print(f"in: {in_ds} || {win}")
         out_ds.write_band(id, src_ds.read(1, window=win))
 
-
+# Async main function to run the program
 async def main_run():
+    """
+    This function runs the main program. A lot of this code just handles creating the input stack from
+    files in cloud storage and iterates over the years to process. 
+    :return: None
+    """
     with rasterio.Env(GDAL_NUM_THREADS="ALL_CPUS", verbose=2, GOOGLE_APPLICATION_CREDENTIALS=os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "fuelcast-storage-credentials.json")):
         zone_ds = rasterio.open(zone_raster_path, chunks=(1024, 1024))
         bounds = zone_ds.bounds
@@ -386,8 +426,8 @@ async def main_run():
             f = f"gs://fuelcast-data/rpms/{y}/rpms_{y}.tif"
             files.append(f)
 
-        meta = zone_ds.meta
-        meta.update(count=len(files))
+        # meta = zone_ds.meta
+        # meta.update(count=len(files))
         profile.update(count=len(files))
 
         print("Stacking raster")
